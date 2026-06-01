@@ -1,0 +1,183 @@
+:root {
+  color-scheme: light;
+  --color-field-ink: #17211b;
+  --color-field-muted: #536259;
+  --color-field-paper: #f4f1e8;
+  --color-field-card: #fffaf0;
+  --color-field-line: #d7cdbb;
+  --color-field-accent: #2f6f4e;
+  --color-field-accent-strong: #17452f;
+  --color-field-wash: #e7dfcf;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.75rem;
+  --shadow-card: 0 1.5rem 4rem rgb(23 33 27 / 0.14);
+  --font-display: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+  --font-body: 'Noto Sans KR', 'IBM Plex Sans KR', sans-serif;
+  --text-caption: 0.82rem;
+  --text-body: 1rem;
+  --text-lead: clamp(1.4rem, 3vw, 2.4rem);
+  --text-title: clamp(3.4rem, 11vw, 7rem);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 12% 18%, var(--color-field-wash), transparent 28rem),
+    linear-gradient(135deg, var(--color-field-paper), var(--color-field-card));
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--color-field-ink);
+  font-family: var(--font-body);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--space-5);
+}
+
+.hero-card {
+  position: relative;
+  width: min(100%, 58rem);
+  overflow: hidden;
+  border: 1px solid var(--color-field-line);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(90deg, transparent 49%, rgb(47 111 78 / 0.08) 50%, transparent 51%) 0 0 / 4rem 4rem,
+    linear-gradient(0deg, transparent 49%, rgb(47 111 78 / 0.08) 50%, transparent 51%) 0 0 / 4rem 4rem,
+    var(--color-field-card);
+  box-shadow: var(--shadow-card);
+  padding: clamp(var(--space-5), 6vw, var(--space-8));
+}
+
+.hero-card::before {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  width: clamp(5rem, 14vw, 9rem);
+  height: clamp(5rem, 14vw, 9rem);
+  border: 1px solid var(--color-field-line);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(90deg, transparent 48%, var(--color-field-line) 49%, var(--color-field-line) 51%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, var(--color-field-line) 49%, var(--color-field-line) 51%, transparent 52%),
+    rgb(255 250 240 / 0.78);
+  content: '';
+  transform: rotate(3deg);
+}
+
+.eyebrow {
+  max-width: 24rem;
+  margin: 0 0 var(--space-4);
+  color: var(--color-field-accent-strong);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 12ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  line-height: 0.88;
+  letter-spacing: -0.08em;
+}
+
+.hero-copy {
+  max-width: 32rem;
+  margin: var(--space-5) 0 0;
+  color: var(--color-field-accent-strong);
+  font-size: var(--text-lead);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.readiness-panel {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 43rem;
+  margin-top: var(--space-7);
+  border: 1px solid var(--color-field-line);
+  border-radius: var(--radius-md);
+  background: rgb(244 241 232 / 0.72);
+  padding: var(--space-5);
+}
+
+.readiness-status {
+  margin: 0;
+  color: var(--color-field-accent-strong);
+  font-size: var(--text-body);
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.readiness-panel ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.readiness-panel li {
+  position: relative;
+  padding-left: var(--space-5);
+  color: var(--color-field-muted);
+  line-height: 1.7;
+}
+
+.readiness-panel li::before {
+  position: absolute;
+  top: 0.7em;
+  left: 0;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-field-accent);
+  content: '';
+}
+
+.next-note {
+  max-width: 36rem;
+  margin: var(--space-5) 0 0;
+  color: var(--color-field-muted);
+  font-size: var(--text-caption);
+  line-height: 1.7;
+}
+
+@media (max-width: 42rem) {
+  .app-shell {
+    padding: var(--space-3);
+  }
+
+  .hero-card::before {
+    opacity: 0.38;
+  }
+}
