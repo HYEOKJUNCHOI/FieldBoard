@@ -172,6 +172,72 @@ h1 {
   line-height: 1.7;
 }
 
+.foundation-panel {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 43rem;
+  margin-top: var(--space-5);
+  border: 1px solid var(--color-field-line);
+  border-radius: var(--radius-md);
+  background: rgb(255 250 240 / 0.84);
+  padding: var(--space-5);
+}
+
+.foundation-panel__topline {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.foundation-panel__label {
+  margin: 0;
+  color: var(--color-field-accent-strong);
+  font-size: var(--text-caption);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.foundation-panel__summary {
+  margin: 0;
+  color: var(--color-field-ink);
+  line-height: 1.6;
+}
+
+.foundation-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.foundation-panel button {
+  border: 1px solid var(--color-field-accent);
+  border-radius: 999px;
+  background: var(--color-field-accent);
+  color: #f7fff9;
+  padding: 0.8rem 1.15rem;
+  font-weight: 800;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+.foundation-panel button:hover:not(:disabled) {
+  box-shadow: 0 0 0 0.2rem rgb(47 111 78 / 0.18);
+  transform: translateY(-1px);
+}
+
+.foundation-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.foundation-panel__message {
+  margin: 0;
+  color: var(--color-field-muted);
+  line-height: 1.65;
+}
+
 @media (max-width: 42rem) {
   .app-shell {
     padding: var(--space-3);

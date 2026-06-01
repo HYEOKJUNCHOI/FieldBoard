@@ -1,4 +1,12 @@
+import { useEffect, useMemo, useState } from 'react';
 import { firebaseClientReadiness } from './shared/firebase/clientConfig';
+import {
+  signInWithGoogle,
+  signOutCurrentUser,
+  subscribeToFirebaseSession,
+  type FirebaseSessionState,
+} from './shared/firebase/auth';
+import { getFirebaseAuth } from './shared/firebase/client';
 
 const readinessItems = [
   'Vercel은 루트 Vite 앱의 정적 빌드를 배포할 준비가 됩니다.',
@@ -7,10 +15,62 @@ const readinessItems = [
 ];
 
 function App() {
+  const [session, setSession] = useState<FirebaseSessionState | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const authReady = firebaseClientReadiness.status === 'ready';
+
+  useEffect(() => {
+    if (!authReady) {
+      setSession(null);
+      return;
+    }
+
+    const auth = getFirebaseAuth();
+
+    if (!auth) {
+      setSession(null);
+      return;
+    }
+
+    return subscribeToFirebaseSession(auth, setSession);
+  }, [authReady]);
+
+  const sessionSummary = useMemo(() => {
+    if (!session) {
+      return '아직 로그인하지 않았습니다.';
+    }
+
+    const displayName = session.displayName ?? '표시명 없음';
+    const email = session.email ?? '이메일 없음';
+
+    return `${displayName} · ${email} · ${session.uid}`;
+  }, [session]);
+
   const firebaseMessage =
     firebaseClientReadiness.status === 'ready'
       ? 'Firebase 클라이언트 설정 값이 모두 감지되었습니다.'
       : `Firebase 연결 대기 중: ${firebaseClientReadiness.missingKeys.join(', ')} 값을 .env.local에 추가하세요.`;
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setActionMessage('');
+      const result = await signInWithGoogle();
+      setActionMessage(result.message);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Google sign-in에 실패했습니다.');
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      setActionMessage('');
+      const result = await signOutCurrentUser();
+      setActionMessage(result.message);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'sign-out에 실패했습니다.');
+    }
+  };
 
   return (
     <main className="app-shell" aria-labelledby="fieldboard-title">
@@ -26,6 +86,24 @@ function App() {
               <li key={item}>{item}</li>
             ))}
           </ul>
+        </div>
+
+        <div className="foundation-panel" aria-label="Firebase foundation panel">
+          <div className="foundation-panel__topline">
+            <p className="foundation-panel__label">Firebase Auth session</p>
+            <p className="foundation-panel__summary">{sessionSummary}</p>
+          </div>
+
+          <div className="foundation-panel__actions">
+            <button type="button" onClick={handleGoogleSignIn} disabled={!authReady || session !== null}>
+              Google sign in
+            </button>
+            <button type="button" onClick={handleSignOut} disabled={!authReady || session === null}>
+              Sign out
+            </button>
+          </div>
+
+          <p className="foundation-panel__message">{actionMessage || 'owner 기반 세션 상태는 UID, email, displayName으로 유지됩니다.'}</p>
         </div>
 
         <p className="next-note">
