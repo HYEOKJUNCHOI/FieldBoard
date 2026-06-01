@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "verify:firestore-rules": "node scripts/verify-firestore-rules.mjs"
   },
   "dependencies": {
     "firebase": "latest",
