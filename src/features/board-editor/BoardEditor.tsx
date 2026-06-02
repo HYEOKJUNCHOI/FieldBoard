@@ -127,7 +127,7 @@ function createBoard(rows: number, columns: number): EditorState {
     previewCorner: 'bottom-right',
     previewX: previewCornerPositions['bottom-right'].x,
     previewY: previewCornerPositions['bottom-right'].y,
-    previewScale: 0.72,
+    previewScale: 0.5,
   };
 }
 
@@ -1036,9 +1036,10 @@ export function BoardEditor() {
             </label>
           </div>
 
-          <div className="block-board-preview__frame-shell">
-            <div className="block-board-preview__photo" ref={previewPhotoRef}>
-              <span className="block-board-preview__tag">4:3 PHOTO</span>
+          <div className="block-board-preview__frame-shell" aria-label="휴대폰 실사용 기준 4대3 사진 미리보기">
+            <div className="block-board-preview__phone-frame">
+              <div className="block-board-preview__phone-sensor" aria-hidden="true" />
+              <div className="block-board-preview__photo" ref={previewPhotoRef}>
               <div
                 className={previewClassName}
                 style={{
@@ -1082,6 +1083,7 @@ export function BoardEditor() {
                   </div>
                 ))}
               </div>
+            </div>
             </div>
           </div>
         </aside>
