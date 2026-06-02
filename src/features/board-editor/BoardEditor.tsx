@@ -85,6 +85,7 @@ interface ColumnResizeDraft {
   startClientX: number;
   leftWidth: number;
   rightWidth: number;
+  rowLeft: number;
   rowPixelWidth: number;
   shiftKey: boolean;
 }
@@ -372,6 +373,7 @@ function equalizeRowsBySelection(state: EditorState, selectedKeys: Set<Selection
 
     return row.map((cell) => ({
       ...cell,
+      width: 1,
       colSpan: 1,
       rowSpan: 1,
       hidden: false,
@@ -652,6 +654,7 @@ export function BoardEditor() {
       : [draft.rowIndex];
     const sourceTotalWidth = sourceRow.reduce((sum, cell) => sum + (cell.width ?? 1), 0);
     const widthDelta = ((clientX - draft.startClientX) / Math.max(draft.rowPixelWidth, 1)) * sourceTotalWidth;
+    const targetBoundaryRatio = Math.min(Math.max((clientX - draft.rowLeft) / Math.max(draft.rowPixelWidth, 1), 0), 1);
 
     resizeRows.forEach((rowIndex) => {
       const row = nextState.cells[rowIndex];
@@ -665,7 +668,12 @@ export function BoardEditor() {
       const baseLeftWidth = rowIndex === draft.rowIndex ? draft.leftWidth : leftCell.width ?? 1;
       const baseRightWidth = rowIndex === draft.rowIndex ? draft.rightWidth : rightCell.width ?? 1;
       const pairTotal = baseLeftWidth + baseRightWidth;
-      const nextLeftWidth = Math.min(Math.max(baseLeftWidth + widthDelta, 0.25), pairTotal - 0.25);
+      const rowTotalWidth = row.reduce((sum, cell) => sum + (cell.width ?? 1), 0);
+      const widthBeforePair = row.slice(0, draft.columnIndex).reduce((sum, cell) => sum + (cell.width ?? 1), 0);
+      const targetLeftWidth = draft.shiftKey
+        ? (targetBoundaryRatio * rowTotalWidth) - widthBeforePair
+        : baseLeftWidth + widthDelta;
+      const nextLeftWidth = Math.min(Math.max(targetLeftWidth, 0.25), pairTotal - 0.25);
 
       leftCell.width = nextLeftWidth;
       rightCell.width = pairTotal - nextLeftWidth;
@@ -700,6 +708,8 @@ export function BoardEditor() {
       return;
     }
 
+    const rowRect = rowElement.getBoundingClientRect();
+
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -712,7 +722,8 @@ export function BoardEditor() {
       startClientX: event.clientX,
       leftWidth: leftCell.width ?? 1,
       rightWidth: rightCell.width ?? 1,
-      rowPixelWidth: rowElement.getBoundingClientRect().width,
+      rowLeft: rowRect.left,
+      rowPixelWidth: rowRect.width,
       shiftKey: event.shiftKey,
     });
   };
@@ -1366,7 +1377,6 @@ export function BoardEditor() {
                   '--preview-scale': state.previewScale,
                   '--preview-x': `${state.previewX}%`,
                   '--preview-y': `${state.previewY}%`,
-                  '--block-board-preview-columns': state.columns,
                 } as CSSProperties}
                 ref={previewOverlayRef}
                 role="grid"
@@ -1376,12 +1386,21 @@ export function BoardEditor() {
                 onPointerUp={clearPreviewDragDraft}
                 onPointerCancel={clearPreviewDragDraft}
               >
-                {state.cells.map((row, rowIndex) => (
-                  <div className="block-board-preview__row" key={`preview-row-${rowIndex}`}>
-                    {row.map((cell, columnIndex) => {
-                      if (cell.hidden) {
-                        return null;
-                      }
+                {state.cells.map((row, rowIndex) => {
+                  const visibleCells = row.filter((cell) => !cell.hidden);
+                  const previewTemplateColumns = visibleCells.map((cell) => `${cell.width ?? 1}fr`).join(' ');
+                  const rowHeight = state.rowHeights[rowIndex] ?? 1;
+
+                  return (
+                  <div
+                    className="block-board-preview__row"
+                    style={{
+                      gridTemplateColumns: previewTemplateColumns,
+                      '--block-board-preview-row-height': rowHeight,
+                    } as CSSProperties}
+                    key={`preview-row-${rowIndex}`}
+                  >
+                    {visibleCells.map((cell, columnIndex) => {
 
                       return (
                         <div
@@ -1401,7 +1420,8 @@ export function BoardEditor() {
                       );
                     })}
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
             </div>

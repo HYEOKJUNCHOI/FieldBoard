@@ -2599,7 +2599,6 @@ h3 {
   left: var(--preview-x);
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(var(--block-board-preview-columns), minmax(0, 1fr));
   width: 82%;
   border: 1px solid var(--color-board-line);
   background: var(--color-board-line);
@@ -2626,6 +2625,11 @@ h3 {
   outline-offset: var(--space-1);
   cursor: grabbing;
   filter: drop-shadow(0 0 var(--space-3) var(--color-neon-wash));
+}
+
+.block-board-preview__row {
+  display: grid;
+  min-height: calc(var(--block-board-preview-row-height, 1) * 1.45rem);
 }
 
 .block-board-preview__cell {
@@ -2663,10 +2667,6 @@ h3 {
   .block-board-toolbar__color,
   .block-board-preview__controls {
     width: 100%;
-  }
-
-  .block-board-grid {
-    grid-template-columns: repeat(var(--block-board-columns), minmax(4.2rem, 1fr));
   }
 
   .block-board-preview__frame-shell {
