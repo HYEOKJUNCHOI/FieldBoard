@@ -2127,7 +2127,7 @@ h3 {
 
 .block-board-editor {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--space-3);
 }
 
@@ -2143,6 +2143,68 @@ h3 {
 .block-board-editor__status strong {
   color: var(--color-neon-strong);
   font-size: var(--text-lead);
+}
+
+.block-board-dropzones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.block-board-dropzone {
+  position: relative;
+  display: grid;
+  min-height: 4.8rem;
+  gap: var(--space-1);
+  place-items: center;
+  border: var(--board-border-width) dashed var(--color-line-strong);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, rgb(108 255 135 / 0.08), transparent 70%),
+    var(--color-graphite-980);
+  color: var(--color-neon-strong);
+  font-weight: 900;
+  text-align: center;
+  touch-action: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.block-board-dropzone small {
+  color: var(--color-graphite-500);
+  font-size: var(--text-caption);
+}
+
+.block-board-dropzone--add {
+  cursor: grab;
+}
+
+.block-board-dropzone--add:active,
+.block-board-dropzone--active {
+  cursor: grabbing;
+}
+
+.block-board-dropzone--trash {
+  border-color: rgb(255 95 95 / 0.58);
+  background:
+    linear-gradient(135deg, var(--color-danger-soft), transparent),
+    var(--color-graphite-980);
+  color: var(--color-danger);
+}
+
+.block-board-dropzone--active,
+.block-board-dropzone--armed {
+  border-style: solid;
+  border-color: var(--color-neon);
+  box-shadow: var(--shadow-neon);
+}
+
+.block-board-dropzone--hot {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 2.2rem var(--color-danger-soft);
+  transform: scale(1.02);
 }
 
 .block-board-grid {

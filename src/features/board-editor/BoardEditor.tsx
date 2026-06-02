@@ -966,16 +966,19 @@ export function BoardEditor() {
   };
 
   const isPointerNearTrash = (x: number, y: number) => {
-    const trash = document.querySelector<HTMLElement>('[data-trash-zone="true"]');
+    const trashZones = Array.from(document.querySelectorAll<HTMLElement>('[data-trash-zone="true"]'));
 
-    if (!trash) {
+    if (trashZones.length === 0) {
       return false;
     }
 
-    const rect = trash.getBoundingClientRect();
     const hotPadding = 42;
 
-    return x >= rect.left - hotPadding && x <= rect.right + hotPadding && y >= rect.top - hotPadding && y <= rect.bottom + hotPadding;
+    return trashZones.some((trash) => {
+      const rect = trash.getBoundingClientRect();
+
+      return x >= rect.left - hotPadding && x <= rect.right + hotPadding && y >= rect.top - hotPadding && y <= rect.bottom + hotPadding;
+    });
   };
 
   const handleEqualizeSelection = () => {
@@ -1196,6 +1199,27 @@ export function BoardEditor() {
         <section className="block-board-editor" aria-label="표 편집 영역">
           <div className="block-board-editor__status">
             <strong>{selectedCount}개 셀 선택됨</strong>
+          </div>
+
+          <div className="block-board-dropzones" aria-label="셀 추가와 삭제 드롭존">
+            <button
+              type="button"
+              className={`block-board-dropzone block-board-dropzone--add${isCellSourceDragging ? ' block-board-dropzone--active' : ''}`}
+              onPointerDown={handleSourcePointerDown}
+              onPointerMove={handleSourcePointerMove}
+              onPointerUp={handleSourcePointerUp}
+              onPointerCancel={() => {
+                clearCellSourceDragState();
+              }}
+            >
+              <span>셀 추가 드롭존</span>
+              <small>여기서 끌어 표에 놓기</small>
+            </button>
+
+            <div className={`block-board-dropzone block-board-dropzone--trash${cellMoveDragDraft?.started || isCellSourceDragging ? ' block-board-dropzone--armed' : ''}${isTrashHot ? ' block-board-dropzone--hot' : ''}`} data-trash-zone="true" aria-label="큰 휴지통 드롭존">
+              <span>삭제 드롭존</span>
+              <small>셀을 여기 놓을 때만 삭제</small>
+            </div>
           </div>
 
           <div
