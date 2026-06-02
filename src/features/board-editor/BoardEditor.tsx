@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 
 import { clampOverlayPreviewPosition, moveOverlayPreviewByPixelDelta } from './index.js';
 
@@ -177,7 +177,7 @@ function createBoard(rows: number, columns: number): EditorState {
     rows,
     columns,
     cells: Array.from({ length: rows }, (_, rowIndex) => (
-      Array.from({ length: columns }, (_, columnIndex) => createCell(rowIndex, columnIndex, `R${rowIndex + 1} C${columnIndex + 1}`))
+      Array.from({ length: columns }, (_, columnIndex) => createCell(rowIndex, columnIndex, getCellName({ rowIndex, columnIndex })))
     )),
     rowHeights: Array.from({ length: rows }, () => 1),
     previewCorner: 'bottom-right',
@@ -193,6 +193,23 @@ function cloneState(state: EditorState): EditorState {
 
 function getSelectionKey(point: CellPoint): SelectionKey {
   return `${point.rowIndex}:${point.columnIndex}`;
+}
+
+function getColumnName(columnIndex: number) {
+  let columnNumber = columnIndex + 1;
+  let name = '';
+
+  while (columnNumber > 0) {
+    const remainder = (columnNumber - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    columnNumber = Math.floor((columnNumber - 1) / 26);
+  }
+
+  return name;
+}
+
+function getCellName(point: CellPoint) {
+  return `${getColumnName(point.columnIndex)}${point.rowIndex + 1}`;
 }
 
 function parseSelectionKey(key: SelectionKey): CellPoint {
@@ -249,7 +266,7 @@ function getCellRect(element: HTMLElement): CellPoint | null {
 }
 
 function shouldRefreshGeneratedCellText(text: string) {
-  return /^R\d+\s+C\d+$/.test(text) || text === '새 셀';
+  return /^R\d+\s+C\d+$/.test(text) || /^[A-Z]+\d+$/.test(text) || text === '새 셀';
 }
 
 function reindexBoard(state: EditorState): EditorState {
@@ -263,7 +280,7 @@ function reindexBoard(state: EditorState): EditorState {
     ...cell,
     width: cell.width ?? 1,
     id: `cell-${rowIndex + 1}-${columnIndex + 1}-${cell.id.split('-').at(-1) ?? 'local'}`,
-    text: shouldRefreshGeneratedCellText(cell.text) ? `R${rowIndex + 1} C${columnIndex + 1}` : cell.text,
+    text: shouldRefreshGeneratedCellText(cell.text) ? getCellName({ rowIndex, columnIndex }) : cell.text,
   })));
 
   return nextState;
@@ -404,9 +421,11 @@ export function BoardEditor() {
   const [isTrashHot, setIsTrashHot] = useState(false);
   const [previewDragDraft, setPreviewDragDraft] = useState<PreviewDragDraft | null>(null);
   const [resizeDraft, setResizeDraft] = useState<ResizeDraft | null>(null);
+  const [editingCellKey, setEditingCellKey] = useState<SelectionKey | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const previewPhotoRef = useRef<HTMLDivElement | null>(null);
   const previewOverlayRef = useRef<HTMLDivElement | null>(null);
+  const cellEditorRefs = useRef(new Map<SelectionKey, HTMLTextAreaElement>());
   const suppressNextCellClickRef = useRef(false);
 
   const state = history.present;
@@ -414,6 +433,17 @@ export function BoardEditor() {
   const firstSelectedCell = useMemo(() => getMutableSelectedCells(state, selection)[0] ?? null, [selection, state]);
   const previewClassName = `block-board-preview__overlay${previewDragDraft ? ' block-board-preview__overlay--dragging' : ''}`;
   const movingCell = cellMoveDragDraft ? state.cells[cellMoveDragDraft.source.rowIndex]?.[cellMoveDragDraft.source.columnIndex] : null;
+
+  useEffect(() => {
+    if (!editingCellKey) {
+      return;
+    }
+
+    const editor = cellEditorRefs.current.get(editingCellKey);
+
+    editor?.focus();
+    editor?.select();
+  }, [editingCellKey]);
 
   const pushResizeHistory = () => {
     setHistory((currentHistory) => ({
@@ -505,6 +535,15 @@ export function BoardEditor() {
       return;
     }
 
+    if (event.key === 'Enter') {
+      const selectedPoint = parseSelectionKey(Array.from(selection)[0] ?? getSelectionKey(anchorCell));
+      event.preventDefault();
+      setEditingCellKey(getSelectionKey(selectedPoint));
+      setSelection(new Set([getSelectionKey(selectedPoint)]));
+      setAnchorCell(selectedPoint);
+      return;
+    }
+
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       commit((current) => applyToSelectedCells(current, selection, (cell) => {
@@ -550,6 +589,15 @@ export function BoardEditor() {
 
     setSelection(new Set([key]));
     setAnchorCell(point);
+  };
+
+  const handleCellDoubleClick = (event: MouseEvent<HTMLDivElement>, point: CellPoint) => {
+    const key = getSelectionKey(point);
+
+    event.preventDefault();
+    setSelection(new Set([key]));
+    setAnchorCell(point);
+    setEditingCellKey(key);
   };
 
   const handleCellPointerDown = (event: PointerEvent<HTMLDivElement>, point: CellPoint) => {
@@ -639,6 +687,17 @@ export function BoardEditor() {
 
       return nextState;
     }, new Set([key]), point);
+  };
+
+  const handleCellEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setEditingCellKey(null);
+      event.currentTarget.blur();
+      return;
+    }
+
+    event.stopPropagation();
   };
 
   const resizeAdjacentCells = (current: EditorState, draft: ColumnResizeDraft, clientX: number) => {
@@ -1286,6 +1345,9 @@ export function BoardEditor() {
 
                   const point = { rowIndex, columnIndex };
                   const selected = selection.has(getSelectionKey(point));
+                  const cellKey = getSelectionKey(point);
+                  const cellName = getCellName(point);
+                  const isEditingCell = editingCellKey === cellKey;
                   const insertPreviewPlacement = cellInsertPreview
                     && cellInsertPreview.rowIndex === rowIndex
                     && cellInsertPreview.columnIndex === columnIndex
@@ -1311,16 +1373,33 @@ export function BoardEditor() {
                       data-row-index={rowIndex}
                       data-column-index={columnIndex}
                       onClick={(event) => handleCellClick(event, point)}
+                      onDoubleClick={(event) => handleCellDoubleClick(event, point)}
                       onPointerDown={(event) => handleCellPointerDown(event, point)}
                       key={cell.id}
                     >
-                      <span className="block-board-cell__label">R{rowIndex + 1} C{columnIndex + 1}</span>
-                      <textarea
-                        value={cell.text}
-                        onChange={(event) => handleCellTextChange(point, event.currentTarget.value)}
-                        onClick={(event) => event.stopPropagation()}
-                        aria-label={`R${rowIndex + 1} C${columnIndex + 1} 내용`}
-                      />
+                      <span className="block-board-cell__label">{cellName}</span>
+                      {isEditingCell ? (
+                        <textarea
+                          value={cell.text}
+                          ref={(element) => {
+                            if (element) {
+                              cellEditorRefs.current.set(cellKey, element);
+                            } else {
+                              cellEditorRefs.current.delete(cellKey);
+                            }
+                          }}
+                          onChange={(event) => handleCellTextChange(point, event.currentTarget.value)}
+                          onBlur={() => setEditingCellKey(null)}
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={handleCellEditorKeyDown}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          aria-label={`${cellName} 내용 편집`}
+                        />
+                      ) : (
+                        <div className={cell.text ? 'block-board-cell__text' : 'block-board-cell__text block-board-cell__text--empty'}>
+                          {cell.text || 'Enter 또는 더블클릭으로 입력'}
+                        </div>
+                      )}
                       {!isFlexPreviewRow && renderedIndex < rowCells.length - 1 && row[columnIndex + 1] && !row[columnIndex + 1].hidden ? (
                         <button
                           type="button"

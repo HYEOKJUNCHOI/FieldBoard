@@ -2496,6 +2496,24 @@ h3 {
   text-align: inherit;
 }
 
+.block-board-cell__text {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 3.4rem;
+  align-items: center;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.block-board-cell__text--empty {
+  color: rgb(17 24 39 / 0.38);
+  font-size: var(--text-caption);
+  font-weight: 800;
+}
+
 .block-board-drag-preview {
   position: fixed;
   top: var(--drag-preview-y);
