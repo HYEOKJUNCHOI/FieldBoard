@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 
-import { moveOverlayPreviewByPixelDelta } from './index.js';
+import { clampOverlayPreviewPosition, moveOverlayPreviewByPixelDelta } from './index.js';
 
 type Align = 'left' | 'center' | 'right';
 type PreviewCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -75,6 +75,14 @@ interface CellMoveDragDraft {
   started: boolean;
 }
 
+type RenderCell =
+  | { kind: 'cell'; cell: BoardCell; columnIndex: number }
+  | { kind: 'slot'; columnIndex: number; placement: 'before' | 'after' };
+
+function isRenderableCell(entry: RenderCell): entry is Extract<RenderCell, { kind: 'cell' }> {
+  return entry.kind === 'cell';
+}
+
 type SelectionKey = string;
 
 const defaultRows = 4;
@@ -101,10 +109,17 @@ const cornerAriaLabels: Record<PreviewCorner, string> = {
 };
 
 const previewCornerPositions: Record<PreviewCorner, { x: number; y: number }> = {
-  'top-left': { x: 34, y: 28 },
-  'top-right': { x: 66, y: 28 },
-  'bottom-left': { x: 34, y: 72 },
-  'bottom-right': { x: 66, y: 72 },
+  'top-left': { x: 22, y: 8 },
+  'top-right': { x: 78, y: 8 },
+  'bottom-left': { x: 22, y: 92 },
+  'bottom-right': { x: 78, y: 92 },
+};
+
+const previewCornerTargets: Record<PreviewCorner, { x: number; y: number }> = {
+  'top-left': { x: 0, y: 0 },
+  'top-right': { x: 100, y: 0 },
+  'bottom-left': { x: 0, y: 100 },
+  'bottom-right': { x: 100, y: 100 },
 };
 
 const alignLabels: Record<Align, string> = {
@@ -247,13 +262,10 @@ function insertColumnAt(state: EditorState, preview: CellInsertPreview): EditorS
 }
 
 function moveCellToInsertPreview(state: EditorState, source: CellPoint, preview: CellInsertPreview): EditorState {
-  if (source.rowIndex !== preview.rowIndex) {
-    return state;
-  }
-
   const sourceRow = state.cells[source.rowIndex];
+  const targetRow = state.cells[preview.rowIndex];
 
-  if (!sourceRow || sourceRow.length <= 1) {
+  if (!sourceRow || !targetRow || sourceRow.length <= 1) {
     return state;
   }
 
@@ -264,8 +276,8 @@ function moveCellToInsertPreview(state: EditorState, source: CellPoint, preview:
   }
 
   const nextState = cloneState(state);
-  const row = [...nextState.cells[source.rowIndex]];
-  const [movingCell] = row.splice(source.columnIndex, 1);
+  const nextSourceRow = [...nextState.cells[source.rowIndex]];
+  const [movingCell] = nextSourceRow.splice(source.columnIndex, 1);
 
   if (!movingCell) {
     return state;
@@ -273,18 +285,21 @@ function moveCellToInsertPreview(state: EditorState, source: CellPoint, preview:
 
   let insertionIndex = preview.placement === 'before' ? preview.columnIndex : preview.columnIndex + 1;
 
-  if (source.columnIndex < insertionIndex) {
+  if (source.rowIndex === preview.rowIndex && source.columnIndex < insertionIndex) {
     insertionIndex -= 1;
   }
 
-  insertionIndex = Math.min(Math.max(insertionIndex, 0), row.length);
+  const nextTargetRow = source.rowIndex === preview.rowIndex ? nextSourceRow : [...nextState.cells[preview.rowIndex]];
 
-  if (insertionIndex === source.columnIndex) {
+  insertionIndex = Math.min(Math.max(insertionIndex, 0), nextTargetRow.length);
+
+  if (source.rowIndex === preview.rowIndex && insertionIndex === source.columnIndex) {
     return state;
   }
 
-  row.splice(insertionIndex, 0, movingCell);
-  nextState.cells[source.rowIndex] = row;
+  nextTargetRow.splice(insertionIndex, 0, movingCell);
+  nextState.cells[source.rowIndex] = nextSourceRow;
+  nextState.cells[preview.rowIndex] = nextTargetRow;
 
   return reindexBoard(nextState);
 }
@@ -768,7 +783,17 @@ export function BoardEditor() {
   };
 
   const setPreviewCorner = (previewCorner: PreviewCorner) => {
-    const position = previewCornerPositions[previewCorner];
+    const metrics = getPreviewDragMetrics();
+    const target = previewCornerTargets[previewCorner];
+    const fallback = previewCornerPositions[previewCorner];
+    const position = metrics
+      ? clampOverlayPreviewPosition(
+        { x: target.x, y: target.y, scale: state.previewScale },
+        metrics.photoSize,
+        metrics.overlaySize,
+      )
+      : { x: fallback.x, y: fallback.y };
+
     commit((current) => ({ ...cloneState(current), previewCorner, previewX: position.x, previewY: position.y }));
   };
 
@@ -894,7 +919,7 @@ export function BoardEditor() {
           <small>끌어서 추가</small>
         </button>
 
-        <div className={`block-board-trash${isTrashHot ? ' block-board-trash--hot' : ''}`} data-trash-zone="true" aria-label="휴지통">
+        <div className={`block-board-trash${cellMoveDragDraft?.started || isCellSourceDragging ? ' block-board-trash--armed' : ''}${isTrashHot ? ' block-board-trash--hot' : ''}`} data-trash-zone="true" aria-label="휴지통">
           <span>휴지통</span>
           <small>드롭 삭제</small>
         </div>
@@ -954,15 +979,53 @@ export function BoardEditor() {
           </div>
 
           <div
-            className="block-board-grid"
+            className={cellMoveDragDraft?.started ? 'block-board-grid block-board-grid--drag-boundary' : 'block-board-grid'}
             ref={editorRef}
             role="grid"
             aria-label="웹 보드판 표"
             style={{ '--block-board-columns': state.columns } as CSSProperties}
           >
-            {state.cells.map((row, rowIndex) => (
-              <div className="block-board-grid__row" role="row" key={`row-${rowIndex}`}>
-                {row.map((cell, columnIndex) => {
+            {state.cells.map((row, rowIndex) => {
+              const isLiftPreviewRow = cellMoveDragDraft?.started && cellMoveDragDraft.source.rowIndex === rowIndex;
+              const liftedColumnIndex = isLiftPreviewRow ? cellMoveDragDraft.source.columnIndex : -1;
+              const isInsertPreviewRow = cellMoveDragDraft?.started && cellInsertPreview?.rowIndex === rowIndex;
+              const visibleRowCells: RenderCell[] = row
+                .map((cell, columnIndex): RenderCell => ({ kind: 'cell', cell, columnIndex }))
+                .filter((entry) => isRenderableCell(entry) && !entry.cell.hidden && entry.columnIndex !== liftedColumnIndex);
+              const renderedRowCells = isInsertPreviewRow && cellInsertPreview
+                ? visibleRowCells.flatMap((entry) => {
+                  if (entry.kind !== 'cell' || entry.columnIndex !== cellInsertPreview.columnIndex) {
+                    return [entry];
+                  }
+
+                  const slot: RenderCell = { kind: 'slot', columnIndex: entry.columnIndex, placement: cellInsertPreview.placement };
+
+                  return cellInsertPreview.placement === 'before' ? [slot, entry] : [entry, slot];
+                })
+                : visibleRowCells;
+              const isFlexPreviewRow = isLiftPreviewRow || isInsertPreviewRow;
+
+              return (
+              <div
+                className={isFlexPreviewRow ? 'block-board-grid__row block-board-grid__row--flex-preview' : 'block-board-grid__row'}
+                role="row"
+                style={isFlexPreviewRow ? { '--preview-row-columns': Math.max(renderedRowCells.length, 1) } as CSSProperties : undefined}
+                key={`row-${rowIndex}`}
+              >
+                {(isFlexPreviewRow ? renderedRowCells : row.map((cell, columnIndex): RenderCell => ({ kind: 'cell', cell, columnIndex }))).map((entry) => {
+                  if (entry.kind === 'slot') {
+                    return (
+                      <div
+                        className="block-board-cell block-board-cell--insert-slot"
+                        role="presentation"
+                        aria-hidden="true"
+                        key={`slot-${rowIndex}-${entry.columnIndex}-${entry.placement}`}
+                      />
+                    );
+                  }
+
+                  const { cell, columnIndex } = entry;
+
                   if (cell.hidden) {
                     return null;
                   }
@@ -975,8 +1038,8 @@ export function BoardEditor() {
                     ? cellInsertPreview.placement
                     : null;
                   const cellStyle = {
-                    '--cell-row-span': cell.rowSpan,
-                    '--cell-col-span': cell.colSpan,
+                    '--cell-row-span': isFlexPreviewRow ? 1 : cell.rowSpan,
+                    '--cell-col-span': isFlexPreviewRow ? 1 : cell.colSpan,
                     backgroundColor: cell.style.backgroundColor,
                     color: cell.style.color,
                     fontWeight: cell.style.bold ? 900 : 650,
@@ -1008,7 +1071,8 @@ export function BoardEditor() {
                   );
                 })}
               </div>
-            ))}
+            );
+            })}
           </div>
 
           {cellMoveDragDraft?.started && movingCell ? (
