@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "vitest",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "verify:firestore-rules": "node scripts/verify-firestore-rules.mjs"
@@ -20,6 +21,7 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "vitest": "latest"
   }
 }
