@@ -2209,7 +2209,13 @@ h3 {
 .block-board-grid__row {
   display: grid;
   grid-template-columns: repeat(var(--block-board-row-columns), minmax(0, 1fr));
+  min-height: calc(var(--block-board-row-height, 1) * 5.4rem);
   min-width: var(--block-board-row-min-width);
+}
+
+.block-board-grid__row-shell {
+  position: relative;
+  min-width: var(--block-board-row-min-width, 100%);
 }
 
 .block-board-preview__row {
@@ -2239,6 +2245,72 @@ h3 {
     box-shadow 120ms ease,
     outline-color 120ms ease,
     transform 120ms ease;
+}
+
+.block-board-cell__resize-handle,
+.block-board-row-resize-handle {
+  position: absolute;
+  z-index: 8;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  touch-action: none;
+}
+
+.block-board-cell__resize-handle--column {
+  top: 0;
+  right: -0.45rem;
+  bottom: 0;
+  width: 0.9rem;
+  cursor: col-resize;
+}
+
+.block-board-cell__resize-handle--column::before {
+  position: absolute;
+  top: var(--space-2);
+  right: calc(50% - 1px);
+  bottom: var(--space-2);
+  width: 2px;
+  border-radius: 999px;
+  background: rgb(255 80 80 / 0.34);
+  box-shadow: 0 0 0.8rem rgb(255 80 80 / 0.22);
+  content: '';
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.block-board-cell:hover .block-board-cell__resize-handle--column::before,
+.block-board-cell__resize-handle--column:hover::before,
+.block-board-cell__resize-handle--column:focus-visible::before {
+  opacity: 1;
+}
+
+.block-board-row-resize-handle {
+  right: 0;
+  bottom: -0.45rem;
+  left: 0;
+  height: 0.9rem;
+  cursor: row-resize;
+}
+
+.block-board-row-resize-handle::before {
+  position: absolute;
+  top: calc(50% - 1px);
+  right: var(--space-2);
+  left: var(--space-2);
+  height: 2px;
+  border-radius: 999px;
+  background: rgb(255 80 80 / 0.34);
+  box-shadow: 0 0 0.8rem rgb(255 80 80 / 0.22);
+  content: '';
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.block-board-grid__row-shell:hover .block-board-row-resize-handle::before,
+.block-board-row-resize-handle:hover::before,
+.block-board-row-resize-handle:focus-visible::before {
+  opacity: 1;
 }
 
 .block-board-cell:active {

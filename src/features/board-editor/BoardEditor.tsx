@@ -16,6 +16,7 @@ interface CellStyle {
 interface BoardCell {
   id: string;
   text: string;
+  width: number;
   rowSpan: number;
   colSpan: number;
   hidden: boolean;
@@ -27,6 +28,7 @@ interface EditorState {
   rows: number;
   columns: number;
   cells: BoardCell[][];
+  rowHeights: number[];
   previewCorner: PreviewPlacement;
   previewX: number;
   previewY: number;
@@ -74,6 +76,29 @@ interface CellMoveDragDraft {
   clientY: number;
   started: boolean;
 }
+
+interface ColumnResizeDraft {
+  kind: 'column';
+  pointerId: number;
+  rowIndex: number;
+  columnIndex: number;
+  startClientX: number;
+  leftWidth: number;
+  rightWidth: number;
+  rowPixelWidth: number;
+  shiftKey: boolean;
+}
+
+interface RowResizeDraft {
+  kind: 'row';
+  pointerId: number;
+  rowIndex: number;
+  startClientY: number;
+  topHeight: number;
+  bottomHeight: number;
+}
+
+type ResizeDraft = ColumnResizeDraft | RowResizeDraft;
 
 type RenderCell =
   | { kind: 'cell'; cell: BoardCell; columnIndex: number }
@@ -138,6 +163,7 @@ function createCell(rowIndex: number, columnIndex: number, text = ''): BoardCell
   return {
     id: `cell-${rowIndex + 1}-${columnIndex + 1}-${Math.random().toString(36).slice(2, 8)}`,
     text,
+    width: 1,
     rowSpan: 1,
     colSpan: 1,
     hidden: false,
@@ -152,6 +178,7 @@ function createBoard(rows: number, columns: number): EditorState {
     cells: Array.from({ length: rows }, (_, rowIndex) => (
       Array.from({ length: columns }, (_, columnIndex) => createCell(rowIndex, columnIndex, `R${rowIndex + 1} C${columnIndex + 1}`))
     )),
+    rowHeights: Array.from({ length: rows }, () => 1),
     previewCorner: 'bottom-right',
     previewX: previewCornerPositions['bottom-right'].x,
     previewY: previewCornerPositions['bottom-right'].y,
@@ -230,8 +257,10 @@ function reindexBoard(state: EditorState): EditorState {
 
   nextState.rows = nextState.cells.length;
   nextState.columns = nextColumnCount;
+  nextState.rowHeights = nextState.cells.map((_, rowIndex) => nextState.rowHeights[rowIndex] ?? 1);
   nextState.cells = nextState.cells.map((row, rowIndex) => row.map((cell, columnIndex) => ({
     ...cell,
+    width: cell.width ?? 1,
     id: `cell-${rowIndex + 1}-${columnIndex + 1}-${cell.id.split('-').at(-1) ?? 'local'}`,
     text: shouldRefreshGeneratedCellText(cell.text) ? `R${rowIndex + 1} C${columnIndex + 1}` : cell.text,
   })));
@@ -372,6 +401,7 @@ export function BoardEditor() {
   const [cellMoveDragDraft, setCellMoveDragDraft] = useState<CellMoveDragDraft | null>(null);
   const [isTrashHot, setIsTrashHot] = useState(false);
   const [previewDragDraft, setPreviewDragDraft] = useState<PreviewDragDraft | null>(null);
+  const [resizeDraft, setResizeDraft] = useState<ResizeDraft | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const previewPhotoRef = useRef<HTMLDivElement | null>(null);
   const previewOverlayRef = useRef<HTMLDivElement | null>(null);
@@ -382,6 +412,21 @@ export function BoardEditor() {
   const firstSelectedCell = useMemo(() => getMutableSelectedCells(state, selection)[0] ?? null, [selection, state]);
   const previewClassName = `block-board-preview__overlay${previewDragDraft ? ' block-board-preview__overlay--dragging' : ''}`;
   const movingCell = cellMoveDragDraft ? state.cells[cellMoveDragDraft.source.rowIndex]?.[cellMoveDragDraft.source.columnIndex] : null;
+
+  const pushResizeHistory = () => {
+    setHistory((currentHistory) => ({
+      past: [...currentHistory.past, cloneState(currentHistory.present)].slice(-80),
+      present: currentHistory.present,
+      future: [],
+    }));
+  };
+
+  const setResizedStateWithoutHistory = (recipe: (current: EditorState) => EditorState) => {
+    setHistory((currentHistory) => ({
+      ...currentHistory,
+      present: recipe(currentHistory.present),
+    }));
+  };
 
   const commit = useCallback((recipe: (current: EditorState) => EditorState, nextSelection?: Set<SelectionKey>, nextAnchor?: CellPoint) => {
     setHistory((currentHistory) => {
@@ -506,6 +551,10 @@ export function BoardEditor() {
   };
 
   const handleCellPointerDown = (event: PointerEvent<HTMLDivElement>, point: CellPoint) => {
+    if (resizeDraft) {
+      return;
+    }
+
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
     }
@@ -529,8 +578,8 @@ export function BoardEditor() {
     });
   };
 
-  const handleCellPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!cellMoveDragDraft || event.pointerId !== cellMoveDragDraft.pointerId) {
+  const handleCellPointerMove = (event: PointerEvent<HTMLElement>) => {
+    if (resizeDraft || !cellMoveDragDraft || event.pointerId !== cellMoveDragDraft.pointerId) {
       return;
     }
 
@@ -549,7 +598,11 @@ export function BoardEditor() {
     setCellInsertPreview(resolveCellInsertPreview(event.clientX, event.clientY));
   };
 
-  const clearCellMoveDrag = (event: PointerEvent<HTMLDivElement>) => {
+  const clearCellMoveDrag = (event: PointerEvent<HTMLElement>) => {
+    if (resizeDraft) {
+      return;
+    }
+
     if (cellMoveDragDraft?.started) {
       suppressNextCellClickRef.current = true;
 
@@ -584,6 +637,127 @@ export function BoardEditor() {
 
       return nextState;
     }, new Set([key]), point);
+  };
+
+  const resizeAdjacentCells = (current: EditorState, draft: ColumnResizeDraft, clientX: number) => {
+    const nextState = cloneState(current);
+    const sourceRow = nextState.cells[draft.rowIndex];
+
+    if (!sourceRow) {
+      return current;
+    }
+
+    const resizeRows = draft.shiftKey
+      ? nextState.cells.map((_, rowIndex) => rowIndex)
+      : [draft.rowIndex];
+    const sourceTotalWidth = sourceRow.reduce((sum, cell) => sum + (cell.width ?? 1), 0);
+    const widthDelta = ((clientX - draft.startClientX) / Math.max(draft.rowPixelWidth, 1)) * sourceTotalWidth;
+
+    resizeRows.forEach((rowIndex) => {
+      const row = nextState.cells[rowIndex];
+      const leftCell = row?.[draft.columnIndex];
+      const rightCell = row?.[draft.columnIndex + 1];
+
+      if (!row || !leftCell || !rightCell || leftCell.hidden || rightCell.hidden) {
+        return;
+      }
+
+      const baseLeftWidth = rowIndex === draft.rowIndex ? draft.leftWidth : leftCell.width ?? 1;
+      const baseRightWidth = rowIndex === draft.rowIndex ? draft.rightWidth : rightCell.width ?? 1;
+      const pairTotal = baseLeftWidth + baseRightWidth;
+      const nextLeftWidth = Math.min(Math.max(baseLeftWidth + widthDelta, 0.25), pairTotal - 0.25);
+
+      leftCell.width = nextLeftWidth;
+      rightCell.width = pairTotal - nextLeftWidth;
+    });
+
+    return nextState;
+  };
+
+  const resizeAdjacentRows = (current: EditorState, draft: RowResizeDraft, clientY: number) => {
+    const nextState = cloneState(current);
+    const heightDelta = (clientY - draft.startClientY) / 96;
+    const pairTotal = draft.topHeight + draft.bottomHeight;
+    const nextTopHeight = Math.min(Math.max(draft.topHeight + heightDelta, 0.45), pairTotal - 0.45);
+
+    nextState.rowHeights[draft.rowIndex] = nextTopHeight;
+    nextState.rowHeights[draft.rowIndex + 1] = pairTotal - nextTopHeight;
+
+    return nextState;
+  };
+
+  const handleColumnResizePointerDown = (event: PointerEvent<HTMLButtonElement>, rowIndex: number, columnIndex: number) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const rowElement = event.currentTarget.closest<HTMLElement>('.block-board-grid__row');
+    const row = state.cells[rowIndex];
+    const leftCell = row?.[columnIndex];
+    const rightCell = row?.[columnIndex + 1];
+
+    if (!rowElement || !leftCell || !rightCell) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pushResizeHistory();
+    setResizeDraft({
+      kind: 'column',
+      pointerId: event.pointerId,
+      rowIndex,
+      columnIndex,
+      startClientX: event.clientX,
+      leftWidth: leftCell.width ?? 1,
+      rightWidth: rightCell.width ?? 1,
+      rowPixelWidth: rowElement.getBoundingClientRect().width,
+      shiftKey: event.shiftKey,
+    });
+  };
+
+  const handleRowResizePointerDown = (event: PointerEvent<HTMLButtonElement>, rowIndex: number) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pushResizeHistory();
+    setResizeDraft({
+      kind: 'row',
+      pointerId: event.pointerId,
+      rowIndex,
+      startClientY: event.clientY,
+      topHeight: state.rowHeights[rowIndex] ?? 1,
+      bottomHeight: state.rowHeights[rowIndex + 1] ?? 1,
+    });
+  };
+
+  const handleResizePointerMove = (event: PointerEvent<HTMLElement>) => {
+    if (!resizeDraft || resizeDraft.pointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setResizedStateWithoutHistory((current) => (
+      resizeDraft.kind === 'column'
+        ? resizeAdjacentCells(current, resizeDraft, event.clientX)
+        : resizeAdjacentRows(current, resizeDraft, event.clientY)
+    ));
+  };
+
+  const clearResizeDraft = (event: PointerEvent<HTMLElement>) => {
+    if (!resizeDraft || resizeDraft.pointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setResizeDraft(null);
   };
 
   const handleStyleChange = (style: Partial<CellStyle>) => {
@@ -922,7 +1096,23 @@ export function BoardEditor() {
   };
 
   return (
-    <main className="block-board" onKeyDown={handleKeyDown} onPointerMove={handleCellPointerMove} onPointerUp={clearCellMoveDrag} onPointerCancel={clearCellMoveDrag} tabIndex={-1}>
+    <main
+      className="block-board"
+      onKeyDown={handleKeyDown}
+      onPointerMove={(event) => {
+        handleResizePointerMove(event);
+        handleCellPointerMove(event);
+      }}
+      onPointerUp={(event) => {
+        clearResizeDraft(event);
+        clearCellMoveDrag(event);
+      }}
+      onPointerCancel={(event) => {
+        clearResizeDraft(event);
+        clearCellMoveDrag(event);
+      }}
+      tabIndex={-1}
+    >
       <header className="block-board-toolbar" aria-label="보드판 편집 도구">
         <button
           type="button"
@@ -1024,15 +1214,24 @@ export function BoardEditor() {
               const isFlexPreviewRow = isLiftPreviewRow || isInsertPreviewRow;
               const rowCells = isFlexPreviewRow ? renderedRowCells : visibleRowCells;
               const rowColumnCount = Math.max(rowCells.length, 1);
+              const rowTemplateColumns = rowCells
+                .map((entry) => `${entry.kind === 'cell' && !isFlexPreviewRow ? entry.cell.width ?? 1 : 1}fr`)
+                .join(' ');
+              const rowHeight = state.rowHeights[rowIndex] ?? 1;
 
               return (
-              <div
-                className={isFlexPreviewRow ? 'block-board-grid__row block-board-grid__row--flex-preview' : 'block-board-grid__row'}
-                role="row"
-                style={{ '--block-board-row-columns': rowColumnCount, '--block-board-row-min-width': `${rowColumnCount * 4.8}rem` } as CSSProperties}
-                key={`row-${rowIndex}`}
-              >
-                {rowCells.map((entry) => {
+              <div className="block-board-grid__row-shell" key={`row-shell-${rowIndex}`}>
+                <div
+                  className={isFlexPreviewRow ? 'block-board-grid__row block-board-grid__row--flex-preview' : 'block-board-grid__row'}
+                  role="row"
+                  style={{
+                    '--block-board-row-columns': rowColumnCount,
+                    '--block-board-row-min-width': `${rowColumnCount * 4.8}rem`,
+                    '--block-board-row-height': rowHeight,
+                    gridTemplateColumns: rowTemplateColumns,
+                  } as CSSProperties}
+                >
+                {rowCells.map((entry, renderedIndex) => {
                   if (entry.kind === 'slot') {
                     return (
                       <div
@@ -1087,9 +1286,26 @@ export function BoardEditor() {
                         onClick={(event) => event.stopPropagation()}
                         aria-label={`R${rowIndex + 1} C${columnIndex + 1} 내용`}
                       />
+                      {!isFlexPreviewRow && renderedIndex < rowCells.length - 1 && row[columnIndex + 1] && !row[columnIndex + 1].hidden ? (
+                        <button
+                          type="button"
+                          className="block-board-cell__resize-handle block-board-cell__resize-handle--column"
+                          aria-label={`R${rowIndex + 1} C${columnIndex + 1} 오른쪽 경계 조절`}
+                          onPointerDown={(event) => handleColumnResizePointerDown(event, rowIndex, columnIndex)}
+                        />
+                      ) : null}
                     </div>
                   );
                 })}
+                </div>
+                {rowIndex < state.cells.length - 1 ? (
+                  <button
+                    type="button"
+                    className="block-board-row-resize-handle"
+                    aria-label={`${rowIndex + 1}행과 ${rowIndex + 2}행 사이 높이 조절`}
+                    onPointerDown={(event) => handleRowResizePointerDown(event, rowIndex)}
+                  />
+                ) : null}
               </div>
             );
             })}
