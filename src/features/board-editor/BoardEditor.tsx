@@ -1030,18 +1030,24 @@ export function BoardEditor() {
 
         <aside className="block-board-preview" aria-label="4대3 사진 미리보기">
           <div className="block-board-preview__controls">
-            <div className="block-board-preview__corners" role="group" aria-label="보드판 위치">
-              {(Object.keys(cornerLabels) as PreviewCorner[]).map((corner) => (
-                <button
-                  type="button"
-                  aria-label={cornerAriaLabels[corner]}
-                  className={state.previewCorner === corner ? 'block-board-preview__corner block-board-preview__corner--active' : 'block-board-preview__corner'}
-                  onClick={() => setPreviewCorner(corner)}
-                  key={corner}
-                >
-                  {cornerLabels[corner]}
-                </button>
-              ))}
+            <div className="block-board-preview__position-panel">
+              <span className="block-board-preview__current-position">
+                현재 위치 {state.previewCorner === 'custom' ? '직접 배치' : cornerAriaLabels[state.previewCorner]}
+              </span>
+              <div className="block-board-preview__corners" role="group" aria-label="보드판 위치">
+                {(Object.keys(cornerLabels) as PreviewCorner[]).map((corner) => (
+                  <button
+                    type="button"
+                    aria-label={cornerAriaLabels[corner]}
+                    aria-current={state.previewCorner === corner ? 'true' : undefined}
+                    className={state.previewCorner === corner ? 'block-board-preview__corner block-board-preview__corner--active' : 'block-board-preview__corner'}
+                    onClick={() => setPreviewCorner(corner)}
+                    key={corner}
+                  >
+                    {cornerLabels[corner]}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <label className="block-board-preview__scale">

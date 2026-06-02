@@ -1941,6 +1941,16 @@ h3 {
   transform: translateY(calc(-1 * var(--board-border-width)));
 }
 
+.block-board-preview__corner--active {
+  border-color: var(--color-neon-strong);
+  background-color: var(--color-neon);
+  background-image: linear-gradient(180deg, var(--color-neon-strong), var(--color-neon));
+  color: var(--color-graphite-980);
+  outline: 2px solid rgb(255 255 255 / 0.4);
+  outline-offset: var(--space-1);
+  box-shadow: var(--shadow-selection);
+}
+
 .block-board-toolbar button:disabled {
   cursor: not-allowed;
   opacity: 0.42;
@@ -2338,12 +2348,30 @@ h3 {
 .block-board-preview {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-2);
 }
 
 .block-board-preview__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   flex-wrap: wrap;
+  gap: var(--space-2);
   justify-content: space-between;
+}
+
+.block-board-preview__position-panel {
+  display: grid;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.block-board-preview__current-position {
+  color: var(--color-neon-strong);
+  font-size: var(--text-caption);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0.28rem 0.9rem rgb(0 0 0 / 0.42);
 }
 
 .block-board-preview__scale {
@@ -2359,15 +2387,15 @@ h3 {
 .block-board-preview__frame-shell {
   display: grid;
   place-items: center;
-  min-height: 38rem;
+  min-height: 31rem;
   perspective: 90rem;
 }
 
 .block-board-preview__phone-frame {
   position: relative;
   display: grid;
-  width: min(100%, 30rem);
-  max-height: min(72vh, 46rem);
+  width: min(100%, 28rem);
+  max-height: min(68vh, 42rem);
   aspect-ratio: 9 / 19.5;
   align-content: start;
   overflow: hidden;
@@ -2380,7 +2408,7 @@ h3 {
     0 2.4rem 6rem rgb(0 0 0 / 0.58),
     inset 0 0 0 1px rgb(255 255 255 / 0.1),
     inset 0 0 2.4rem rgb(255 255 255 / 0.04);
-  padding: clamp(2.8rem, 7%, 3.6rem) clamp(0.75rem, 3.2%, 1rem) clamp(1rem, 4%, 1.4rem);
+  padding: clamp(2.15rem, 5.6%, 2.7rem) clamp(0.55rem, 2.2%, 0.8rem) clamp(0.75rem, 3%, 1rem);
   transform: rotateX(1.5deg);
 }
 
