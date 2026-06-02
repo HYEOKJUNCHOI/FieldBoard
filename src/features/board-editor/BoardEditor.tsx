@@ -87,10 +87,17 @@ const defaultCellStyle: CellStyle = {
 };
 
 const cornerLabels: Record<PreviewCorner, string> = {
-  'top-left': '상좌',
-  'top-right': '상우',
-  'bottom-left': '하좌',
-  'bottom-right': '하우',
+  'top-left': '↖',
+  'top-right': '↗',
+  'bottom-left': '↙',
+  'bottom-right': '↘',
+};
+
+const cornerAriaLabels: Record<PreviewCorner, string> = {
+  'top-left': '좌상단',
+  'top-right': '우상단',
+  'bottom-left': '좌하단',
+  'bottom-right': '우하단',
 };
 
 const previewCornerPositions: Record<PreviewCorner, { x: number; y: number }> = {
@@ -101,9 +108,15 @@ const previewCornerPositions: Record<PreviewCorner, { x: number; y: number }> = 
 };
 
 const alignLabels: Record<Align, string> = {
-  left: '좌',
-  center: '중',
-  right: '우',
+  left: '☰←',
+  center: '☰',
+  right: '→☰',
+};
+
+const alignAriaLabels: Record<Align, string> = {
+  left: '왼쪽 정렬',
+  center: '가운데 정렬',
+  right: '오른쪽 정렬',
 };
 
 function createCell(rowIndex: number, columnIndex: number, text = ''): BoardCell {
@@ -878,16 +891,15 @@ export function BoardEditor() {
           }}
         >
           <span>셀 추가</span>
-          <small>위치에 놓으면 열 삽입</small>
+          <small>끌어서 추가</small>
         </button>
 
         <div className={`block-board-trash${isTrashHot ? ' block-board-trash--hot' : ''}`} data-trash-zone="true" aria-label="휴지통">
           <span>휴지통</span>
-          <small>선택 영역 드롭</small>
+          <small>드롭 삭제</small>
         </div>
 
-        <div className="block-board-toolbar__grid-maker" aria-label="NxN 표 만들기">
-          <span>NxN</span>
+        <div className="block-board-toolbar__grid-maker" aria-label="표 만들기">
           <input type="number" min="1" max="12" value={rowInput} onChange={(event) => setRowInput(clampGridValue(Number.parseInt(event.currentTarget.value, 10)))} aria-label="행 수" />
           <span>x</span>
           <input type="number" min="1" max="12" value={columnInput} onChange={(event) => setColumnInput(clampGridValue(Number.parseInt(event.currentTarget.value, 10)))} aria-label="열 수" />
@@ -895,13 +907,13 @@ export function BoardEditor() {
         </div>
 
         <div className="block-board-toolbar__group" aria-label="히스토리">
-          <button type="button" onClick={undo} disabled={history.past.length === 0}>되돌리기</button>
-          <button type="button" onClick={redo} disabled={history.future.length === 0}>다시실행</button>
+          <button type="button" onClick={undo} disabled={history.past.length === 0} aria-label="되돌리기">↶</button>
+          <button type="button" onClick={redo} disabled={history.future.length === 0} aria-label="다시실행">↷</button>
         </div>
 
-        <div className="block-board-toolbar__group" aria-label="병합과 분할">
-          <button type="button" onClick={handleMerge} disabled={selection.size < 2}>병합</button>
-          <button type="button" onClick={handleSplit} disabled={!firstSelectedCell || (firstSelectedCell.rowSpan === 1 && firstSelectedCell.colSpan === 1)}>분할</button>
+        <div className="block-board-toolbar__group block-board-toolbar__group--primary" aria-label="병합과 분할">
+          <button type="button" onClick={handleMerge} disabled={selection.size < 2}>셀 병합</button>
+          <button type="button" onClick={handleSplit} disabled={!firstSelectedCell || (firstSelectedCell.rowSpan === 1 && firstSelectedCell.colSpan === 1)}>셀 분할</button>
           <button type="button" onClick={handleEqualizeSelection} disabled={selection.size === 0}>균등</button>
         </div>
 
@@ -923,6 +935,7 @@ export function BoardEditor() {
           {(['left', 'center', 'right'] as Align[]).map((align) => (
             <button
               type="button"
+              aria-label={alignAriaLabels[align]}
               className={firstSelectedCell?.style.align === align ? 'block-board-toolbar__toggle block-board-toolbar__toggle--active' : 'block-board-toolbar__toggle'}
               onClick={() => handleStyleChange({ align })}
               key={align}
@@ -1021,6 +1034,7 @@ export function BoardEditor() {
               {(Object.keys(cornerLabels) as PreviewCorner[]).map((corner) => (
                 <button
                   type="button"
+                  aria-label={cornerAriaLabels[corner]}
                   className={state.previewCorner === corner ? 'block-board-preview__corner block-board-preview__corner--active' : 'block-board-preview__corner'}
                   onClick={() => setPreviewCorner(corner)}
                   key={corner}
