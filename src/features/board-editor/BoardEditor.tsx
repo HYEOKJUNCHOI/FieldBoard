@@ -248,15 +248,11 @@ function insertColumnAt(state: EditorState, preview: CellInsertPreview): EditorS
 
   const insertionIndex = preview.placement === 'before' ? preview.columnIndex : preview.columnIndex + 1;
   const nextState = cloneState(state);
+  const boundedIndex = Math.min(Math.max(insertionIndex, 0), targetRow.length);
+  const nextRow = [...nextState.cells[preview.rowIndex]];
 
-  nextState.cells = nextState.cells.map((row, rowIndex) => {
-    const boundedIndex = Math.min(Math.max(insertionIndex, 0), row.length);
-    const nextRow = [...row];
-
-    nextRow.splice(boundedIndex, 0, createCell(rowIndex, boundedIndex, '새 셀'));
-
-    return nextRow;
-  });
+  nextRow.splice(boundedIndex, 0, createCell(preview.rowIndex, boundedIndex, '새 셀'));
+  nextState.cells[preview.rowIndex] = nextRow;
 
   return reindexBoard(nextState);
 }
@@ -550,14 +546,14 @@ export function BoardEditor() {
 
     event.preventDefault();
     setIsTrashHot(isPointerNearTrash(event.clientX, event.clientY));
-    setCellInsertPreview(getCellInsertPreview(event.clientX, event.clientY));
+    setCellInsertPreview(resolveCellInsertPreview(event.clientX, event.clientY));
   };
 
   const clearCellMoveDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (cellMoveDragDraft?.started) {
       suppressNextCellClickRef.current = true;
 
-      const preview = getCellInsertPreview(event.clientX, event.clientY) ?? cellInsertPreview;
+      const preview = resolveCellInsertPreview(event.clientX, event.clientY) ?? cellInsertPreview;
       const sourceKey = getSelectionKey(cellMoveDragDraft.source);
       const dragSelection = selection.has(sourceKey) ? selection : new Set([sourceKey]);
 
@@ -565,7 +561,7 @@ export function BoardEditor() {
         commit((current) => deleteSelectedCellsByDrop(current, dragSelection), new Set([getSelectionKey({ rowIndex: 0, columnIndex: 0 })]), { rowIndex: 0, columnIndex: 0 });
       } else if (preview) {
         const insertionIndex = preview.placement === 'before' ? preview.columnIndex : preview.columnIndex + 1;
-        const nextColumnIndex = cellMoveDragDraft.source.columnIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
+        const nextColumnIndex = cellMoveDragDraft.source.rowIndex === preview.rowIndex && cellMoveDragDraft.source.columnIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
         const nextPoint = { rowIndex: preview.rowIndex, columnIndex: Math.max(0, nextColumnIndex) };
         commit((current) => moveCellToInsertPreview(current, cellMoveDragDraft.source, preview), new Set([getSelectionKey(nextPoint)]), nextPoint);
       }
@@ -712,6 +708,29 @@ export function BoardEditor() {
     };
   };
 
+  const isPointerInsideRelaxedBoard = (clientX: number, clientY: number) => {
+    const board = editorRef.current;
+
+    if (!board) {
+      return false;
+    }
+
+    const rect = board.getBoundingClientRect();
+    const dragPadding = 96;
+
+    return clientX >= rect.left - dragPadding && clientX <= rect.right + dragPadding && clientY >= rect.top - dragPadding && clientY <= rect.bottom + dragPadding;
+  };
+
+  const resolveCellInsertPreview = (clientX: number, clientY: number) => {
+    const directPreview = getCellInsertPreview(clientX, clientY);
+
+    if (directPreview) {
+      return directPreview;
+    }
+
+    return isPointerInsideRelaxedBoard(clientX, clientY) ? cellInsertPreview : null;
+  };
+
   const clearCellSourceDragState = () => {
     setIsCellSourceDragging(false);
     setCellInsertPreview(null);
@@ -733,7 +752,7 @@ export function BoardEditor() {
       return;
     }
 
-    const preview = getCellInsertPreview(event.clientX, event.clientY);
+    const preview = resolveCellInsertPreview(event.clientX, event.clientY);
 
     setIsTrashHot(isPointerNearTrash(event.clientX, event.clientY));
     setCellInsertPreview(preview);
@@ -750,7 +769,7 @@ export function BoardEditor() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
-    const preview = getCellInsertPreview(event.clientX, event.clientY) ?? cellInsertPreview;
+    const preview = resolveCellInsertPreview(event.clientX, event.clientY) ?? cellInsertPreview;
 
     if (!isTrashHot && preview) {
       const insertedColumnIndex = preview.placement === 'before' ? preview.columnIndex : preview.columnIndex + 1;
@@ -983,7 +1002,6 @@ export function BoardEditor() {
             ref={editorRef}
             role="grid"
             aria-label="웹 보드판 표"
-            style={{ '--block-board-columns': state.columns } as CSSProperties}
           >
             {state.cells.map((row, rowIndex) => {
               const isLiftPreviewRow = cellMoveDragDraft?.started && cellMoveDragDraft.source.rowIndex === rowIndex;
@@ -1004,15 +1022,17 @@ export function BoardEditor() {
                 })
                 : visibleRowCells;
               const isFlexPreviewRow = isLiftPreviewRow || isInsertPreviewRow;
+              const rowCells = isFlexPreviewRow ? renderedRowCells : visibleRowCells;
+              const rowColumnCount = Math.max(rowCells.length, 1);
 
               return (
               <div
                 className={isFlexPreviewRow ? 'block-board-grid__row block-board-grid__row--flex-preview' : 'block-board-grid__row'}
                 role="row"
-                style={isFlexPreviewRow ? { '--preview-row-columns': Math.max(renderedRowCells.length, 1) } as CSSProperties : undefined}
+                style={{ '--block-board-row-columns': rowColumnCount, '--block-board-row-min-width': `${rowColumnCount * 4.8}rem` } as CSSProperties}
                 key={`row-${rowIndex}`}
               >
-                {(isFlexPreviewRow ? renderedRowCells : row.map((cell, columnIndex): RenderCell => ({ kind: 'cell', cell, columnIndex }))).map((entry) => {
+                {rowCells.map((entry) => {
                   if (entry.kind === 'slot') {
                     return (
                       <div
