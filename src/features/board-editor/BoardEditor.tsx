@@ -105,7 +105,17 @@ interface RowResizeDraft {
   bottomHeight: number;
 }
 
-type ResizeDraft = ColumnResizeDraft | RowResizeDraft;
+interface BoardCrossResizeDraft {
+  kind: 'board-cross';
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  rowPixelWidth: number;
+  cells: BoardCell[][];
+  rowHeights: number[];
+}
+
+type ResizeDraft = ColumnResizeDraft | RowResizeDraft | BoardCrossResizeDraft;
 
 type RenderCell =
   | { kind: 'cell'; cell: BoardCell; columnIndex: number }
@@ -354,12 +364,16 @@ function insertColumnAt(state: EditorState, preview: CellInsertPreview): EditorS
   const boundedIndex = Math.min(Math.max(insertionIndex, 0), targetRow.length);
   const nextRow = [...nextState.cells[preview.rowIndex]];
   const rowTotalWidth = nextRow.reduce((sum, cell) => sum + (cell.width ?? 1), 0);
+  const lockedRightWidth = nextRow.slice(boundedIndex).reduce((sum, cell) => sum + (cell.locked ? cell.width ?? 1 : 0), 0);
   const preservedLeftWidth = nextRow.slice(0, boundedIndex).reduce((sum, cell) => sum + (cell.width ?? 1), 0);
-  const distributedCount = nextRow.length - boundedIndex + 1;
-  const distributedWidth = Math.max((rowTotalWidth - preservedLeftWidth) / distributedCount, 0.25);
+  const unlockedRightCount = nextRow.slice(boundedIndex).filter((cell) => !cell.locked).length;
+  const distributedCount = unlockedRightCount + 1;
+  const distributedWidth = Math.max((rowTotalWidth - preservedLeftWidth - lockedRightWidth) / distributedCount, 0.25);
 
   nextRow.slice(boundedIndex).forEach((cell) => {
-    cell.width = distributedWidth;
+    if (!cell.locked) {
+      cell.width = distributedWidth;
+    }
   });
   nextRow.splice(boundedIndex, 0, {
     ...createCell(preview.rowIndex, boundedIndex, '새 셀'),
@@ -380,7 +394,7 @@ function moveCellToInsertPreview(state: EditorState, source: CellPoint, preview:
 
   const sourceCell = sourceRow[source.columnIndex];
 
-  if (!sourceCell || sourceCell.hidden) {
+  if (!sourceCell || sourceCell.hidden || sourceCell.locked) {
     return state;
   }
 
@@ -435,7 +449,7 @@ function deleteSelectedCellsByDrop(state: EditorState, selectedKeys: Set<Selecti
       return;
     }
 
-    nextState.cells[rowIndex] = row.filter((_, columnIndex) => !columns.has(columnIndex));
+    nextState.cells[rowIndex] = row.filter((cell, columnIndex) => !columns.has(columnIndex) || cell.locked);
   });
 
   return reindexBoard(nextState);
@@ -456,7 +470,7 @@ function equalizeRowsBySelection(state: EditorState, selectedKeys: Set<Selection
 
     return row.map((cell) => ({
       ...cell,
-      width: 1,
+      width: cell.locked ? cell.width : 1,
       colSpan: 1,
       rowSpan: 1,
       hidden: false,
@@ -878,6 +892,71 @@ export function BoardEditor() {
     return nextState;
   };
 
+  const resizeBoardCross = (current: EditorState, draft: BoardCrossResizeDraft, clientX: number, clientY: number) => {
+    const nextState = cloneState(current);
+    const widthDelta = (clientX - draft.startClientX) / Math.max(draft.rowPixelWidth, 1);
+    const heightDelta = (clientY - draft.startClientY) / 96;
+
+    nextState.cells = nextState.cells.map((row, rowIndex) => {
+      const baseRow = draft.cells[rowIndex] ?? row;
+
+      if (baseRow.length < 2) {
+        return row;
+      }
+
+      const first = baseRow[0];
+      const second = baseRow[1];
+      const pairTotal = (first?.width ?? 1) + (second?.width ?? 1);
+      const nextFirstWidth = first?.locked || second?.locked
+        ? first?.width ?? 1
+        : Math.min(Math.max((first?.width ?? 1) + (widthDelta * pairTotal), 0.25), pairTotal - 0.25);
+
+      return row.map((cell, columnIndex) => {
+        if (columnIndex === 0) {
+          return { ...cell, width: nextFirstWidth };
+        }
+
+        if (columnIndex === 1) {
+          return { ...cell, width: pairTotal - nextFirstWidth };
+        }
+
+        return cell;
+      });
+    });
+
+    if (nextState.rowHeights.length >= 2) {
+      const pairTotal = (draft.rowHeights[0] ?? 1) + (draft.rowHeights[1] ?? 1);
+      const nextTopHeight = Math.min(Math.max((draft.rowHeights[0] ?? 1) + heightDelta, 0.45), pairTotal - 0.45);
+
+      nextState.rowHeights[0] = nextTopHeight;
+      nextState.rowHeights[1] = pairTotal - nextTopHeight;
+    }
+
+    return nextState;
+  };
+
+  const handleBoardCrossResizePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const boardRect = editorRef.current?.getBoundingClientRect();
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pushResizeHistory();
+    setResizeDraft({
+      kind: 'board-cross',
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      rowPixelWidth: boardRect?.width ?? 1,
+      cells: cloneState(state).cells,
+      rowHeights: [...state.rowHeights],
+    });
+  };
+
   const handleColumnResizePointerDown = (event: PointerEvent<HTMLButtonElement>, rowIndex: number, columnIndex: number) => {
     if (event.button !== 0) {
       return;
@@ -941,7 +1020,9 @@ export function BoardEditor() {
     setResizedStateWithoutHistory((current) => (
       resizeDraft.kind === 'column'
         ? resizeAdjacentCells(current, resizeDraft, event.clientX)
-        : resizeAdjacentRows(current, resizeDraft, event.clientY)
+        : resizeDraft.kind === 'row'
+          ? resizeAdjacentRows(current, resizeDraft, event.clientY)
+          : resizeBoardCross(current, resizeDraft, event.clientX, event.clientY)
     ));
   };
 
@@ -1474,6 +1555,14 @@ export function BoardEditor() {
             role="grid"
             aria-label="웹 보드판 표"
           >
+            <button
+              type="button"
+              className="block-board-cross-resize-handle"
+              aria-label="전체 열과 행 경계 조절"
+              onPointerDown={handleBoardCrossResizePointerDown}
+            >
+              +
+            </button>
             {state.cells.map((row, rowIndex) => {
               const isLiftPreviewRow = cellMoveDragDraft?.started && cellMoveDragDraft.source.rowIndex === rowIndex;
               const liftedColumnIndex = isLiftPreviewRow ? cellMoveDragDraft.source.columnIndex : -1;
