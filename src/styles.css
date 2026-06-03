@@ -2280,6 +2280,19 @@ h3 {
   min-width: var(--block-board-row-min-width, 100%);
 }
 
+.block-board-row-alignment-guide {
+  position: absolute;
+  right: var(--space-2);
+  left: var(--space-2);
+  z-index: 14;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgb(255 60 60 / 0.98) 8%, rgb(255 60 60 / 0.98) 92%, transparent);
+  box-shadow: 0 0 1.2rem rgb(255 60 60 / 0.56), 0 0 0 1px rgb(255 255 255 / 0.22);
+  pointer-events: none;
+  top: var(--row-alignment-guide-y);
+  transform: translateY(-50%);
+}
+
 .block-board-preview__row {
   display: contents;
 }
@@ -2613,7 +2626,7 @@ h3 {
     0 2.4rem 6rem rgb(0 0 0 / 0.58),
     inset 0 0 0 1px rgb(255 255 255 / 0.1),
     inset 0 0 2.4rem rgb(255 255 255 / 0.04);
-  padding: clamp(2rem, 5.1%, 2.45rem) clamp(0.48rem, 1.9%, 0.68rem) clamp(0.62rem, 2.5%, 0.85rem);
+  padding: clamp(3.1rem, 8.2%, 3.7rem) clamp(1.05rem, 4.6%, 1.35rem) clamp(0.9rem, 3.2%, 1.15rem);
   transform: rotateX(1.5deg);
 }
 
@@ -2652,7 +2665,7 @@ h3 {
   aspect-ratio: 4 / 3;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 0.22);
-  border-radius: 1.1rem;
+  border-radius: 1.35rem;
   background:
     linear-gradient(180deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.28)),
     url('/철근.png') center / cover no-repeat,

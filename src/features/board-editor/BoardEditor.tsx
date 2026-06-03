@@ -67,6 +67,11 @@ interface CellInsertPreview {
   placement: 'before' | 'after';
 }
 
+interface RowAlignmentGuide {
+  clientY: number;
+  boardY: number;
+}
+
 interface CellMoveDragDraft {
   pointerId: number;
   source: CellPoint;
@@ -422,6 +427,7 @@ export function BoardEditor() {
   const [previewDragDraft, setPreviewDragDraft] = useState<PreviewDragDraft | null>(null);
   const [resizeDraft, setResizeDraft] = useState<ResizeDraft | null>(null);
   const [editingCellKey, setEditingCellKey] = useState<SelectionKey | null>(null);
+  const [rowAlignmentGuide, setRowAlignmentGuide] = useState<RowAlignmentGuide | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const previewPhotoRef = useRef<HTMLDivElement | null>(null);
   const previewOverlayRef = useRef<HTMLDivElement | null>(null);
@@ -636,8 +642,10 @@ export function BoardEditor() {
     const deltaX = event.clientX - cellMoveDragDraft.startClientX;
     const deltaY = event.clientY - cellMoveDragDraft.startClientY;
     const started = cellMoveDragDraft.started || Math.hypot(deltaX, deltaY) >= 4;
+    const guide = started ? getRowAlignmentGuide(event.clientY) : null;
+    const snappedClientY = guide?.clientY ?? event.clientY;
 
-    setCellMoveDragDraft({ ...cellMoveDragDraft, clientX: event.clientX, clientY: event.clientY, started });
+    setCellMoveDragDraft({ ...cellMoveDragDraft, clientX: event.clientX, clientY: snappedClientY, started });
 
     if (!started) {
       return;
@@ -645,7 +653,8 @@ export function BoardEditor() {
 
     event.preventDefault();
     setIsTrashHot(isPointerNearTrash(event.clientX, event.clientY));
-    setCellInsertPreview(resolveCellInsertPreview(event.clientX, event.clientY));
+    setRowAlignmentGuide(guide);
+    setCellInsertPreview(resolveCellInsertPreview(event.clientX, snappedClientY));
   };
 
   const clearCellMoveDrag = (event: PointerEvent<HTMLElement>) => {
@@ -656,7 +665,7 @@ export function BoardEditor() {
     if (cellMoveDragDraft?.started) {
       suppressNextCellClickRef.current = true;
 
-      const preview = resolveCellInsertPreview(event.clientX, event.clientY) ?? cellInsertPreview;
+      const preview = resolveCellInsertPreview(event.clientX, rowAlignmentGuide?.clientY ?? event.clientY) ?? cellInsertPreview;
       const sourceKey = getSelectionKey(cellMoveDragDraft.source);
       const dragSelection = selection.has(sourceKey) ? selection : new Set([sourceKey]);
 
@@ -672,6 +681,7 @@ export function BoardEditor() {
 
     setCellMoveDragDraft(null);
     setCellInsertPreview(null);
+    setRowAlignmentGuide(null);
     setIsTrashHot(false);
   };
 
@@ -950,6 +960,38 @@ export function BoardEditor() {
       ...point,
       placement: clientX < rect.left + (rect.width / 2) ? 'before' : 'after',
     };
+  };
+
+  const getRowAlignmentGuide = (clientY: number): RowAlignmentGuide | null => {
+    const board = editorRef.current;
+
+    if (!board) {
+      return null;
+    }
+
+    const boardRect = board.getBoundingClientRect();
+    const guideSnapDistance = 24;
+    const rows = Array.from(board.querySelectorAll<HTMLElement>('.block-board-grid__row'));
+    let closestGuide: RowAlignmentGuide | null = null;
+    let closestDistance = guideSnapDistance + 1;
+
+    rows.forEach((row) => {
+      const rect = row.getBoundingClientRect();
+
+      [rect.top, rect.bottom].forEach((edgeY) => {
+        const distance = Math.abs(clientY - edgeY);
+
+        if (distance <= guideSnapDistance && distance < closestDistance) {
+          closestDistance = distance;
+          closestGuide = {
+            clientY: edgeY,
+            boardY: edgeY - boardRect.top + board.scrollTop,
+          };
+        }
+      });
+    });
+
+    return closestGuide;
   };
 
   const isPointerInsideRelaxedBoard = (clientX: number, clientY: number) => {
@@ -1423,6 +1465,13 @@ export function BoardEditor() {
               </div>
             );
             })}
+            {rowAlignmentGuide ? (
+              <div
+                className="block-board-row-alignment-guide"
+                style={{ '--row-alignment-guide-y': `${rowAlignmentGuide.boardY}px` } as CSSProperties}
+                aria-hidden="true"
+              />
+            ) : null}
           </div>
 
           {cellMoveDragDraft?.started && movingCell ? (
