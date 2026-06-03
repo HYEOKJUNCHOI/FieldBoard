@@ -238,6 +238,20 @@ function getRangeSelection(start: CellPoint, end: CellPoint): SelectionKey[] {
   return keys;
 }
 
+function clampPointToBoard(state: EditorState, point: CellPoint): CellPoint {
+  const rowIndex = Math.min(Math.max(point.rowIndex, 0), state.cells.length - 1);
+  const row = state.cells[rowIndex] ?? [];
+  const columnIndex = Math.min(Math.max(point.columnIndex, 0), Math.max(row.length - 1, 0));
+
+  return { rowIndex, columnIndex };
+}
+
+function getSelectionFocusPoint(selectedKeys: Set<SelectionKey>, anchor: CellPoint): CellPoint {
+  const points = Array.from(selectedKeys).map(parseSelectionKey);
+
+  return points.find((point) => point.rowIndex !== anchor.rowIndex || point.columnIndex !== anchor.columnIndex) ?? anchor;
+}
+
 function clampGridValue(value: number) {
   if (Number.isNaN(value)) {
     return 1;
@@ -306,8 +320,18 @@ function insertColumnAt(state: EditorState, preview: CellInsertPreview): EditorS
   const nextState = cloneState(state);
   const boundedIndex = Math.min(Math.max(insertionIndex, 0), targetRow.length);
   const nextRow = [...nextState.cells[preview.rowIndex]];
+  const rowTotalWidth = nextRow.reduce((sum, cell) => sum + (cell.width ?? 1), 0);
+  const preservedLeftWidth = nextRow.slice(0, boundedIndex).reduce((sum, cell) => sum + (cell.width ?? 1), 0);
+  const distributedCount = nextRow.length - boundedIndex + 1;
+  const distributedWidth = Math.max((rowTotalWidth - preservedLeftWidth) / distributedCount, 0.25);
 
-  nextRow.splice(boundedIndex, 0, createCell(preview.rowIndex, boundedIndex, '새 셀'));
+  nextRow.slice(boundedIndex).forEach((cell) => {
+    cell.width = distributedWidth;
+  });
+  nextRow.splice(boundedIndex, 0, {
+    ...createCell(preview.rowIndex, boundedIndex, '새 셀'),
+    width: distributedWidth,
+  });
   nextState.cells[preview.rowIndex] = nextRow;
 
   return reindexBoard(nextState);
@@ -524,6 +548,33 @@ export function BoardEditor() {
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (isEditingTarget(event.target)) {
+      return;
+    }
+
+    if (event.shiftKey && (event.ctrlKey || event.metaKey) && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      const selectedPoint = parseSelectionKey(Array.from(selection)[0] ?? getSelectionKey(anchorCell));
+      const placement = event.key === 'ArrowLeft' ? 'before' : 'after';
+      const insertedColumnIndex = placement === 'before' ? selectedPoint.columnIndex : selectedPoint.columnIndex + 1;
+      const nextPoint = { rowIndex: selectedPoint.rowIndex, columnIndex: insertedColumnIndex };
+
+      event.preventDefault();
+      commit(
+        (current) => insertColumnAt(current, { ...selectedPoint, placement }),
+        new Set([getSelectionKey(nextPoint)]),
+        nextPoint,
+      );
+      return;
+    }
+
+    if (event.shiftKey && !event.ctrlKey && !event.metaKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      const focusPoint = getSelectionFocusPoint(selection, anchorCell);
+      const nextPoint = clampPointToBoard(state, {
+        rowIndex: focusPoint.rowIndex + (event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0),
+        columnIndex: focusPoint.columnIndex + (event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0),
+      });
+
+      event.preventDefault();
+      setSelection(new Set(getRangeSelection(anchorCell, nextPoint)));
       return;
     }
 
