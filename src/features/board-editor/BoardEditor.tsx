@@ -20,6 +20,7 @@ interface BoardCell {
   rowSpan: number;
   colSpan: number;
   hidden: boolean;
+  locked: boolean;
   mergedFrom?: string;
   style: CellStyle;
 }
@@ -165,6 +166,19 @@ const alignAriaLabels: Record<Align, string> = {
   right: '오른쪽 정렬',
 };
 
+const fieldColorSets = [
+  { name: '흰/검', backgroundColor: '#ffffff', color: '#111827' },
+  { name: '검/흰', backgroundColor: '#111827', color: '#ffffff' },
+  { name: '노랑', backgroundColor: '#fde047', color: '#111827' },
+  { name: '초록', backgroundColor: '#16a34a', color: '#ffffff' },
+  { name: '빨강', backgroundColor: '#dc2626', color: '#ffffff' },
+  { name: '파랑', backgroundColor: '#2563eb', color: '#ffffff' },
+  { name: '주황', backgroundColor: '#f97316', color: '#111827' },
+  { name: '회색', backgroundColor: '#4b5563', color: '#ffffff' },
+  { name: '투명검', backgroundColor: 'rgb(255 255 255 / 0.72)', color: '#111827' },
+  { name: '투명흰', backgroundColor: 'rgb(0 0 0 / 0.42)', color: '#ffffff' },
+];
+
 function createCell(rowIndex: number, columnIndex: number, text = ''): BoardCell {
   return {
     id: `cell-${rowIndex + 1}-${columnIndex + 1}-${Math.random().toString(36).slice(2, 8)}`,
@@ -173,6 +187,7 @@ function createCell(rowIndex: number, columnIndex: number, text = ''): BoardCell
     rowSpan: 1,
     colSpan: 1,
     hidden: false,
+    locked: false,
     style: { ...defaultCellStyle },
   };
 }
@@ -252,6 +267,23 @@ function getSelectionFocusPoint(selectedKeys: Set<SelectionKey>, anchor: CellPoi
   return points.find((point) => point.rowIndex !== anchor.rowIndex || point.columnIndex !== anchor.columnIndex) ?? anchor;
 }
 
+function getSelectionSummary(selectedKeys: Set<SelectionKey>) {
+  const points = Array.from(selectedKeys).map(parseSelectionKey);
+
+  if (points.length === 0) {
+    return '선택 없음';
+  }
+
+  const minRow = Math.min(...points.map((point) => point.rowIndex));
+  const maxRow = Math.max(...points.map((point) => point.rowIndex));
+  const minColumn = Math.min(...points.map((point) => point.columnIndex));
+  const maxColumn = Math.max(...points.map((point) => point.columnIndex));
+  const start = getCellName({ rowIndex: minRow, columnIndex: minColumn });
+  const end = getCellName({ rowIndex: maxRow, columnIndex: maxColumn });
+
+  return points.length === 1 ? `${start} 선택됨` : `${start}:${end} 선택됨`;
+}
+
 function clampGridValue(value: number) {
   if (Number.isNaN(value)) {
     return 1;
@@ -302,6 +334,7 @@ function reindexBoard(state: EditorState): EditorState {
   nextState.cells = nextState.cells.map((row, rowIndex) => row.map((cell, columnIndex) => ({
     ...cell,
     width: cell.width ?? 1,
+    locked: cell.locked ?? false,
     id: `cell-${rowIndex + 1}-${columnIndex + 1}-${cell.id.split('-').at(-1) ?? 'local'}`,
     text: shouldRefreshGeneratedCellText(cell.text) ? getCellName({ rowIndex, columnIndex }) : cell.text,
   })));
@@ -456,15 +489,18 @@ export function BoardEditor() {
   const [resizeDraft, setResizeDraft] = useState<ResizeDraft | null>(null);
   const [editingCellKey, setEditingCellKey] = useState<SelectionKey | null>(null);
   const [rowAlignmentGuide, setRowAlignmentGuide] = useState<RowAlignmentGuide | null>(null);
+  const [longPressCellKey, setLongPressCellKey] = useState<SelectionKey | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const previewPhotoRef = useRef<HTMLDivElement | null>(null);
   const previewOverlayRef = useRef<HTMLDivElement | null>(null);
   const cellEditorRefs = useRef(new Map<SelectionKey, HTMLTextAreaElement>());
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressNextCellClickRef = useRef(false);
 
   const state = history.present;
   const selectedCount = selection.size;
   const firstSelectedCell = useMemo(() => getMutableSelectedCells(state, selection)[0] ?? null, [selection, state]);
+  const selectionSummary = useMemo(() => getSelectionSummary(selection), [selection]);
   const previewClassName = `block-board-preview__overlay${previewDragDraft ? ' block-board-preview__overlay--dragging' : ''}`;
   const movingCell = cellMoveDragDraft ? state.cells[cellMoveDragDraft.source.rowIndex]?.[cellMoveDragDraft.source.columnIndex] : null;
 
@@ -545,6 +581,13 @@ export function BoardEditor() {
       };
     });
   }, []);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (isEditingTarget(event.target)) {
@@ -671,10 +714,20 @@ export function BoardEditor() {
     }
 
     const key = getSelectionKey(point);
+    const pressedCell = state.cells[point.rowIndex]?.[point.columnIndex];
 
     if (!selection.has(key)) {
       setSelection(new Set([key]));
       setAnchorCell(point);
+    }
+
+    clearLongPressTimer();
+    longPressTimerRef.current = setTimeout(() => {
+      setLongPressCellKey(key);
+    }, 280);
+
+    if (pressedCell?.locked) {
+      return;
     }
 
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -707,6 +760,8 @@ export function BoardEditor() {
     }
 
     event.preventDefault();
+    clearLongPressTimer();
+    setLongPressCellKey(null);
     setIsTrashHot(isPointerNearTrash(event.clientX, event.clientY));
     setRowAlignmentGuide(guide);
     setCellInsertPreview(resolveCellInsertPreview(event.clientX, snappedClientY));
@@ -737,6 +792,7 @@ export function BoardEditor() {
     setCellMoveDragDraft(null);
     setCellInsertPreview(null);
     setRowAlignmentGuide(null);
+    clearLongPressTimer();
     setIsTrashHot(false);
   };
 
@@ -746,7 +802,11 @@ export function BoardEditor() {
       const nextState = cloneState(current);
       const cell = nextState.cells[point.rowIndex]?.[point.columnIndex];
 
-      if (cell && !cell.hidden) {
+    if (cell && !cell.hidden) {
+        if (cell.locked) {
+          return nextState;
+        }
+
         cell.text = text;
       }
 
@@ -785,7 +845,7 @@ export function BoardEditor() {
       const leftCell = row?.[draft.columnIndex];
       const rightCell = row?.[draft.columnIndex + 1];
 
-      if (!row || !leftCell || !rightCell || leftCell.hidden || rightCell.hidden) {
+      if (!row || !leftCell || !rightCell || leftCell.hidden || rightCell.hidden || leftCell.locked || rightCell.locked) {
         return;
       }
 
@@ -828,7 +888,7 @@ export function BoardEditor() {
     const leftCell = row?.[columnIndex];
     const rightCell = row?.[columnIndex + 1];
 
-    if (!rowElement || !leftCell || !rightCell) {
+    if (!rowElement || !leftCell || !rightCell || leftCell.locked || rightCell.locked) {
       return;
     }
 
@@ -901,7 +961,25 @@ export function BoardEditor() {
     }
 
     commit((current) => applyToSelectedCells(current, selection, (cell) => {
+      if (cell.locked) {
+        return;
+      }
+
       cell.style = { ...cell.style, ...style };
+    }));
+  };
+
+  const handleColorSetChange = (backgroundColor: string, color: string) => {
+    handleStyleChange({ backgroundColor, color });
+  };
+
+  const handleToggleLock = () => {
+    if (selection.size === 0) {
+      return;
+    }
+
+    commit((current) => applyToSelectedCells(current, selection, (cell) => {
+      cell.locked = !cell.locked;
     }));
   };
 
@@ -1321,15 +1399,22 @@ export function BoardEditor() {
           <button type="button" onClick={handleEqualizeSelection} disabled={selection.size === 0}>균등</button>
         </div>
 
-        <label className="block-board-toolbar__color">
-          <span>배경색</span>
-          <input type="color" value={firstSelectedCell?.style.backgroundColor ?? defaultCellStyle.backgroundColor} onChange={(event) => handleStyleChange({ backgroundColor: event.currentTarget.value })} />
-        </label>
-
-        <label className="block-board-toolbar__color">
-          <span>글자색</span>
-          <input type="color" value={firstSelectedCell?.style.color ?? defaultCellStyle.color} onChange={(event) => handleStyleChange({ color: event.currentTarget.value })} />
-        </label>
+        <details className="block-board-toolbar__color-menu">
+          <summary>색상 세트</summary>
+          <div className="block-board-toolbar__swatches" role="group" aria-label="현장용 색상 세트">
+            {fieldColorSets.map((set) => (
+              <button
+                type="button"
+                className="block-board-toolbar__swatch"
+                style={{ '--swatch-bg': set.backgroundColor, '--swatch-fg': set.color } as CSSProperties}
+                onClick={() => handleColorSetChange(set.backgroundColor, set.color)}
+                key={set.name}
+              >
+                {set.name}
+              </button>
+            ))}
+          </div>
+        </details>
 
         <button type="button" className={firstSelectedCell?.style.bold ? 'block-board-toolbar__toggle block-board-toolbar__toggle--active' : 'block-board-toolbar__toggle'} onClick={() => handleStyleChange({ bold: !firstSelectedCell?.style.bold })}>
           B
@@ -1349,12 +1434,17 @@ export function BoardEditor() {
           ))}
         </div>
 
+        <button type="button" className={firstSelectedCell?.locked ? 'block-board-toolbar__toggle block-board-toolbar__toggle--active' : 'block-board-toolbar__toggle'} onClick={handleToggleLock} disabled={selection.size === 0} aria-label="선택 셀 잠금 전환">
+          🔒
+        </button>
+
       </header>
 
       <section className="block-board__body">
         <section className="block-board-editor" aria-label="표 편집 영역">
           <div className="block-board-editor__status">
-            <strong>{selectedCount}개 셀 선택됨</strong>
+            <strong>{selectionSummary}</strong>
+            <span>{selectedCount}개 셀</span>
           </div>
 
           <div className="block-board-dropzones" aria-label="셀 추가와 삭제 드롭존">
@@ -1445,6 +1535,7 @@ export function BoardEditor() {
                   const cellKey = getSelectionKey(point);
                   const cellName = getCellName(point);
                   const isEditingCell = editingCellKey === cellKey;
+                  const showCellHandles = selected || longPressCellKey === cellKey;
                   const displayText = getDisplayCellText(cell);
                   const insertPreviewPlacement = cellInsertPreview
                     && cellInsertPreview.rowIndex === rowIndex
@@ -1462,7 +1553,7 @@ export function BoardEditor() {
 
                   return (
                     <div
-                      className={`block-board-cell${selected ? ' block-board-cell--selected' : ''}${cellMoveDragDraft?.started && cellMoveDragDraft.source.rowIndex === rowIndex && cellMoveDragDraft.source.columnIndex === columnIndex ? ' block-board-cell--dragging' : ''}${insertPreviewPlacement === 'before' ? ' block-board-cell--insert-before' : ''}${insertPreviewPlacement === 'after' ? ' block-board-cell--insert-after' : ''}`}
+                      className={`block-board-cell${selected ? ' block-board-cell--selected' : ''}${cell.locked ? ' block-board-cell--locked' : ''}${showCellHandles ? ' block-board-cell--handles' : ''}${cellMoveDragDraft?.started && cellMoveDragDraft.source.rowIndex === rowIndex && cellMoveDragDraft.source.columnIndex === columnIndex ? ' block-board-cell--dragging' : ''}${insertPreviewPlacement === 'before' ? ' block-board-cell--insert-before' : ''}${insertPreviewPlacement === 'after' ? ' block-board-cell--insert-after' : ''}`}
                       style={cellStyle}
                       role="gridcell"
                       tabIndex={0}
@@ -1476,6 +1567,8 @@ export function BoardEditor() {
                       key={cell.id}
                     >
                       <span className="block-board-cell__label">{cellName}</span>
+                      {cell.locked ? <span className="block-board-cell__lock" aria-hidden="true">🔒</span> : null}
+                      {showCellHandles ? <span className="block-board-cell__target" aria-hidden="true" /> : null}
                       {isEditingCell ? (
                         <textarea
                           value={cell.text}
