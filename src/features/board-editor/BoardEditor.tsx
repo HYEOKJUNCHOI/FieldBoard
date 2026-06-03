@@ -274,6 +274,10 @@ function shouldRefreshGeneratedCellText(text: string) {
   return /^R\d+\s+C\d+$/.test(text) || /^[A-Z]+\d+$/.test(text) || text === '새 셀';
 }
 
+function getDisplayCellText(cell: BoardCell) {
+  return shouldRefreshGeneratedCellText(cell.text) ? '' : cell.text;
+}
+
 function reindexBoard(state: EditorState): EditorState {
   const nextState = cloneState(state);
   const nextColumnCount = Math.max(...nextState.cells.map((row) => row.length), 1);
@@ -1390,6 +1394,7 @@ export function BoardEditor() {
                   const cellKey = getSelectionKey(point);
                   const cellName = getCellName(point);
                   const isEditingCell = editingCellKey === cellKey;
+                  const displayText = getDisplayCellText(cell);
                   const insertPreviewPlacement = cellInsertPreview
                     && cellInsertPreview.rowIndex === rowIndex
                     && cellInsertPreview.columnIndex === columnIndex
@@ -1438,8 +1443,8 @@ export function BoardEditor() {
                           aria-label={`${cellName} 내용 편집`}
                         />
                       ) : (
-                        <div className={cell.text ? 'block-board-cell__text' : 'block-board-cell__text block-board-cell__text--empty'}>
-                          {cell.text || 'Enter 또는 더블클릭으로 입력'}
+                        <div className={displayText ? 'block-board-cell__text' : 'block-board-cell__text block-board-cell__text--empty'}>
+                          {displayText}
                         </div>
                       )}
                       {!isFlexPreviewRow && renderedIndex < rowCells.length - 1 && row[columnIndex + 1] && !row[columnIndex + 1].hidden ? (

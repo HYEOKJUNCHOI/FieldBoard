@@ -2491,6 +2491,7 @@ h3 {
   font-weight: 900;
   letter-spacing: 0.08em;
   pointer-events: none;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.7), 0 0.28rem 0.8rem rgb(0 0 0 / 0.22);
 }
 
 .block-board-cell textarea {
@@ -2507,6 +2508,7 @@ h3 {
   outline: none;
   resize: vertical;
   text-align: inherit;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.36), 0 0.35rem 0.9rem rgb(0 0 0 / 0.28);
 }
 
 .block-board-cell__text {
@@ -2518,6 +2520,7 @@ h3 {
   overflow-wrap: anywhere;
   line-height: 1.35;
   pointer-events: none;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.36), 0 0.35rem 0.9rem rgb(0 0 0 / 0.3);
   white-space: pre-wrap;
 }
 
@@ -2525,6 +2528,7 @@ h3 {
   color: rgb(17 24 39 / 0.38);
   font-size: var(--text-caption);
   font-weight: 800;
+  text-shadow: none;
 }
 
 .block-board-drag-preview {
@@ -2736,7 +2740,7 @@ h3 {
   line-height: 1.15;
   padding: 0.18rem;
   font-size: clamp(0.42rem, 0.92vw, 0.68rem);
-  text-shadow: 0 1px 0 rgb(255 255 255 / 0.28), 0 0.28rem 0.75rem rgb(0 0 0 / 0.32);
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.55), 0 0.28rem 0.85rem rgb(0 0 0 / 0.45), 0 0 0.28rem rgb(255 255 255 / 0.18);
   word-break: keep-all;
 }
 
